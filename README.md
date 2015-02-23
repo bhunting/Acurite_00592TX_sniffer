@@ -5,6 +5,8 @@ Ideas on decoding protocol and prototype code from Ray Wang (Rayshobby LLC) http
 
 Sniff the AcuRite model 00771W Indoor / Outdoor Thermometer wireless data stream and display the results.
 
+ * http://www.acurite.com/media/manuals/00754-instructions.pdf
+
 Code based on Ray Wang's humidity_display.ino source. Heavily modified by Brad Hunting.
 
 The 00771W wireless temperature probe contains a 433 MHz wireless transmitter. The temperature from the probe is sent approximately every 16 seconds.
