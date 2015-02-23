@@ -77,7 +77,7 @@
  *   byte are a unique identifier per probe.
  * The next two bytes seem to always be 0x44 followed by 0x90, for all of
  *   the probes I have tested (a sample of 6 probes).
- * The two bytes are the temperature. The temperature is encoded as the
+ * The next two bytes are the temperature. The temperature is encoded as the
  *   lower 7 bits of both bytes with the most significant bit being an
  *   even parity bit.  The MSB will be set if required to insure an even
  *   number of bits are set to 1 in the byte. If the least significant
