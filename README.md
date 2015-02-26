@@ -1,5 +1,5 @@
-## Acurite_00771W_sniffer
-Arduino code to sniff and decode Acurite 00771W remote wireless temperature probe
+## Acurite_00592TX_sniffer
+Arduino code to sniff and decode Acurite 00592TX remote wireless temperature probe
 
 Ideas on decoding protocol and prototype code from Ray Wang (Rayshobby LLC) http://rayshobby.net/?p=8998
 
@@ -9,17 +9,17 @@ Sniff the AcuRite model 00771W Indoor / Outdoor Thermometer wireless data stream
 
 Code based on Ray Wang's humidity_display.ino source. Heavily modified by Brad Hunting.
 
-The 00771W wireless temperature probe contains a 433 MHz wireless transmitter. The temperature from the probe is sent approximately every 16 seconds.
+The 00592TX wireless temperature probe contains a 433 MHz wireless transmitter. The temperature from the probe is sent approximately every 16 seconds.
 
-The 00771W typically only sends one SYNC pulse + DATA stream per temperature reading. Infrequently two sync/data streams are sent during the same transmit window but that seems to be the exception.
+The 00592TX typically only sends one SYNC pulse + DATA stream per temperature reading. Infrequently two sync/data streams are sent during the same transmit window but that seems to be the exception.
 
 Ray Wang's code is for a different model of probe, one that transmits both temperature and humidity. Ray' code relies on two sync streams with a preceeding delay. 
  
-The 00771W usually starts the data sync bits right after the RF sync pulses which are random length and polarity.
+The 00592TX usually starts the data sync bits right after the RF sync pulses which are random length and polarity.
 
 Do not rely on a dead/mark time at the beginning of the data sync stream.
 
-The 00771W first emits a seemingly random length string of random width hi/lo pulses, most like to provide radio radio synchronization.
+The 00592TX first emits a seemingly random length string of random width hi/lo pulses, most like to provide radio radio synchronization.
 
 The probe then emits 4 data sync pulses of approximately 50% duty cycle and 1.2 ms period. The sync pulses start with a high level and continue for 4 high / low pulses.
 
