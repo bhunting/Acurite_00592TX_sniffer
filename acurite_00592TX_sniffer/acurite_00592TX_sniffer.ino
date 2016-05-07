@@ -128,6 +128,12 @@ bool         syncFound = false; // true if sync pulses found
 bool         received  = false; // true if sync plus enough bits found
 unsigned int changeCount = 0;
 
+//const unsigned int tempOffset = 2.4;  // offset in degrees C
+//const unsigned int tempOffset = 0;  // offset in degrees C
+//const unsigned int tempOffset10th = 24;  // offset in 10th degrees C
+const unsigned int tempOffset10th = 0;  // offset in 10th degrees C
+
+
 /*
  * helper code to print formatted hex 
  */
@@ -427,18 +433,20 @@ void loop()
       {
 #ifdef VERBOSE_OUTPUT      
          Serial.print("Temperature: ");
-         Serial.print((int)((temp-1024)/10+2.4+0.5));  // round to the nearest integer
+         Serial.print((int)((temp-1024)/10+tempOffset+0.5));  // round to the nearest integer
          //Serial.write(176);    // degree symbol
          Serial.print("C/");
-         Serial.print((int)(((temp-1024)/10+2.4+0.5)*9/5+32));  // convert to F
+         Serial.print((int)(((temp-1024)/10+tempOffset+0.5)*9/5+32));  // convert to F
          //Serial.write(176);    // degree symbol
          Serial.print("F at ");
          Serial.print( millis() );
          Serial.println(" msec");
 #else
-         Serial.print((int)((temp-1024)/10+2.4+0.5));  // round to the nearest integer
+         //Serial.print((int)((temp-1024)/10+tempOffset+0.5));  // round to the nearest integer
+         Serial.print((int)((temp-1024)+tempOffset10th+0.5));  // round to the nearest 10th degree integer
          Serial.print(",");
-         Serial.print((int)(((temp-1024)/10+2.4+0.5)*9/5+32));  // convert to F
+         //Serial.print((int)(((temp-1024)/10+tempOffset+0.5)*9/5+32));  // convert to F
+         Serial.print((int)(((temp-1024)+tempOffset10th+0.5)*9/5+320));  // convert to F
          Serial.print(",");
          Serial.print( millis() );
          Serial.println();
