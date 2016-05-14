@@ -279,10 +279,11 @@ typedef struct acurite_00592TX
  
 typedef struct sensorTempData
 {
-    uint8_t     id;
+    uint8_t     id;     // sensor id (1 - N_sensors)
     uint8_t     status; // 0x80 = BATTERY LOW
                         // 0x40 = CRC ERROR
-    uint16_t    temp;
+    uint16_t    temp;   // temperature value in C, no offset
+    uint32_t    timestamp;  // number of seconds since startup
 } sensorTempData;
 
 static const uint8_t _numSensors = 6; // I happen to have 6 sensor probes
@@ -339,6 +340,12 @@ int convertTimingToBit(unsigned int t0, unsigned int t1)
    return -1;  // undefined
 }
 
+//#define PRINT_BIT_TIMING      
+// Display the raw data received in hex
+//#define PRINT_DATA_BYTES
+//#define PRINT_ERRORS 
+#define PRINT_DATA_ARRAY
+
 //-------------------- loop() ----------------------------------------------
 /*
  * Main Loop
@@ -361,8 +368,7 @@ void loop()
 
 // Print the bit stream for debugging. 
 // Generates a lot of chatter, normally disable this.
-//#define DISPLAY_BIT_TIMING      
-#ifdef DISPLAY_BIT_TIMING
+#ifdef PRINT_BIT_TIMING
       Serial.print("syncFound = ");
       Serial.println(syncFound);
       Serial.print("changeCount = ");
@@ -392,7 +398,7 @@ void loop()
 
          ringIndex += 2;
       }
-#endif // DISPLAY_BIT_TIMING
+#endif // PRINT_BIT_TIMING
 
 
       unsigned char dataBytes[DATABYTESCNT];
@@ -424,17 +430,14 @@ void loop()
          ringIndex += 2;
       }
 
-// Display the raw data received in hex
-//#define DISPLAY_DATA_BYTES
-
       // 
       acurite_00592TX * acurite_data = (acurite_00592TX *)&dataBytes[0];
       
       if( fail )
       {
-#ifdef DISPLAY_DATA_BYTES
+#ifdef PRINT_ERRORS
          Serial.println("Data Byte Display : Decoding error.");
-#endif  
+#endif  // PRINT_ERRORS
       }
       else
       {
@@ -445,7 +448,7 @@ void loop()
                 CRC += dataBytes[i]; 
               }            
 
-#ifdef DISPLAY_DATA_BYTES
+#ifdef PRINT_DATA_BYTES
               
               for( int i = 0; i < DATABYTESCNT; i++ )
               {
@@ -530,15 +533,16 @@ void loop()
       if( fail )
       {
         sensordata[id].temp = 0;
-#ifdef VERBOSE_OUTPUT      
+#ifdef PRINT_ERRORS      
          Serial.println("Decoding error.");
 #endif                 
       }
       else
       {
         sensordata[id].temp = (uint16_t)((temp-1024)+tempOffset10th+0.5);
-#ifdef DISPLAY_DATA_BYTES        
-#ifdef VERBOSE_OUTPUT      
+        sensordata[id].timestamp = millis() / 1000;  // convert milli-seconds into seconds
+#ifdef PRINT_DATA_BYTES        
+#ifdef PRINT_VERBOSE      
          Serial.print("Temperature: ");
          Serial.print((int)((temp-1024)/10+tempOffset+0.5));  // round to the nearest integer
          //Serial.write(176);    // degree symbol
@@ -548,7 +552,7 @@ void loop()
          Serial.print("F at ");
          Serial.print( millis() );
          Serial.println(" msec");
-#else // VERBOSE_OUTPUT
+#else // PRINT_VERBOSE
          //Serial.print((int)((temp-1024)/10+tempOffset+0.5));  // round to the nearest integer
          Serial.print((int)((temp-1024)+tempOffset10th+0.5));  // round to the nearest 10th degree integer
          Serial.print(",");
@@ -557,12 +561,11 @@ void loop()
          Serial.print(",");
          Serial.print( millis() );
          Serial.println();
-#endif // VERBOSE_OUTPUT
-#endif // DISPLAY_DATA_BYTES                 
+#endif // PRINT_VERBOSE
+#endif // PRINT_DATA_BYTES                 
       } 
       
-#define DUMP_DATA_ARRAY
-#ifdef DUMP_DATA_ARRAY
+#ifdef PRINT_DATA_ARRAY
       for( int i = 0; i < _numSensors; i++ )
       {
         Serial.print("id = ");
@@ -570,10 +573,12 @@ void loop()
         Serial.print(", status = ");
         Serial.print(sensordata[i].status, HEX);
         Serial.print(", temp = ");
-        Serial.println(sensordata[i].temp);
+        Serial.print(sensordata[i].temp);
+        Serial.print(", time = ");
+        Serial.println(sensordata[i].timestamp);
 
       }
-#endif
+#endif // PRINT_DATA_ARRAY
 
 DATA_FAIL:      
       // delay for 1 second to avoid repetitions
