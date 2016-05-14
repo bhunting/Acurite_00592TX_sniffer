@@ -130,11 +130,6 @@ bool         syncFound = false; // true if sync pulses found
 bool         received  = false; // true if sync plus enough bits found
 unsigned int changeCount = 0;
 
-//const unsigned int tempOffset = 2.4;  // offset in degrees C
-//const unsigned int tempOffset = 0;  // offset in degrees C
-//const unsigned int tempOffset10th = 24;  // offset in 10th degrees C
-const unsigned int tempOffset10th = 0;  // offset in 10th degrees C
-
 
 //------------- PrintHex8() ------------------------------------------
 /*
@@ -340,10 +335,6 @@ int convertTimingToBit(unsigned int t0, unsigned int t1)
    return -1;  // undefined
 }
 
-//#define PRINT_BIT_TIMING      
-// Display the raw data received in hex
-//#define PRINT_DATA_BYTES
-//#define PRINT_ERRORS 
 #define PRINT_DATA_ARRAY
 
 //-------------------- loop() ----------------------------------------------
@@ -366,44 +357,7 @@ void loop()
       unsigned long temperature = 0;
       bool fail = false;
 
-// Print the bit stream for debugging. 
-// Generates a lot of chatter, normally disable this.
-#ifdef PRINT_BIT_TIMING
-      Serial.print("syncFound = ");
-      Serial.println(syncFound);
-      Serial.print("changeCount = ");
-      Serial.println(changeCount);
-
-      Serial.print("syncIndex = ");
-      Serial.println(syncIndex);
-
-      Serial.print("dataIndex = ");
-      Serial.println(dataIndex);
-
-      ringIndex = (syncIndex - (SYNCPULSEEDGES-1))%RING_BUFFER_SIZE;
-
-      for( int i = 0; i < (SYNCPULSECNT+DATABITSCNT); i++ )
-      {
-         int bit = convertTimingToBit( pulseDurations[ringIndex%RING_BUFFER_SIZE], 
-                                       pulseDurations[(ringIndex+1)%RING_BUFFER_SIZE] );
-
-         Serial.print("bit ");
-         Serial.print( i );
-         Serial.print(" = ");
-         Serial.print(bit);
-         Serial.print(" t1 = ");
-         Serial.print(pulseDurations[ringIndex%RING_BUFFER_SIZE]);
-         Serial.print(" t2 = ");
-         Serial.println(pulseDurations[(ringIndex+1)%RING_BUFFER_SIZE]);
-
-         ringIndex += 2;
-      }
-#endif // PRINT_BIT_TIMING
-
-
-      unsigned char dataBytes[DATABYTESCNT];
-      fail = false; // reset bit decode error flag
-
+      uint8_t dataBytes[DATABYTESCNT];
       // clear the data bytes array
       for( int i = 0; i < DATABYTESCNT; i++ )
       {
@@ -447,26 +401,6 @@ void loop()
               {
                 CRC += dataBytes[i]; 
               }            
-
-#ifdef PRINT_DATA_BYTES
-              
-              for( int i = 0; i < DATABYTESCNT; i++ )
-              {
-                PrintHex8(&dataBytes[i], 1);
-                //Serial.print(dataBytes[i], HEX);
-                Serial.print(",");
-              }
-              Serial.print(CRC, HEX);
-              Serial.print(",");
-              //Serial.println();
-      
-              for( int i = 0; i < DATABYTESCNT; i++ )
-              {
-                Serial.print(dataBytes[i], BIN);
-                Serial.print(",");
-              }
-              //Serial.println();
-#endif  
       }
 
       // fill in data array
@@ -539,30 +473,8 @@ void loop()
       }
       else
       {
-        sensordata[id].temp = (uint16_t)((temp-1024)+tempOffset10th+0.5);
+        sensordata[id].temp = (uint16_t)((temp-1024)+0.5);
         sensordata[id].timestamp = millis() / 1000;  // convert milli-seconds into seconds
-#ifdef PRINT_DATA_BYTES        
-#ifdef PRINT_VERBOSE      
-         Serial.print("Temperature: ");
-         Serial.print((int)((temp-1024)/10+tempOffset+0.5));  // round to the nearest integer
-         //Serial.write(176);    // degree symbol
-         Serial.print("C/");
-         Serial.print((int)(((temp-1024)/10+tempOffset+0.5)*9/5+32));  // convert to F
-         //Serial.write(176);    // degree symbol
-         Serial.print("F at ");
-         Serial.print( millis() );
-         Serial.println(" msec");
-#else // PRINT_VERBOSE
-         //Serial.print((int)((temp-1024)/10+tempOffset+0.5));  // round to the nearest integer
-         Serial.print((int)((temp-1024)+tempOffset10th+0.5));  // round to the nearest 10th degree integer
-         Serial.print(",");
-         //Serial.print((int)(((temp-1024)/10+tempOffset+0.5)*9/5+32));  // convert to F
-         Serial.print((int)(((temp-1024)+tempOffset10th+0.5)*9/5+320));  // convert to F
-         Serial.print(",");
-         Serial.print( millis() );
-         Serial.println();
-#endif // PRINT_VERBOSE
-#endif // PRINT_DATA_BYTES                 
       } 
       
 #ifdef PRINT_DATA_ARRAY
