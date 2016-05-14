@@ -90,6 +90,9 @@
  * The last byte is a simple running sum, modulo 256, of the previous 6 data bytes.
  */
 
+//--------------------------------------------------------------
+//-------- Data & Defines for Acurite Probe sniffing -----------
+//--------------------------------------------------------------
 // ring buffer size has to be large enough to fit
 // data and sync signal, at least 120
 // round up to 128 for now
@@ -259,7 +262,10 @@ void handler()
       }
    }
 }
-//-------------------- data structures ------------------------------
+
+//--------------------------------------------------------------
+//--- data structures for returning temperature data -----------
+//--------------------------------------------------------------
 
 typedef struct acurite_00592TX
 {
@@ -294,6 +300,51 @@ static const uint8_t BATTERY_LOW_VAL  = 0x80;
 static const uint8_t BATTERY_OK_VAL   = 0x40;
 static const uint8_t BATTERY_LOW      = 0x80;
 
+//--------------------------------------------------------------
+//----- variable for returing data over I2C --------------------
+//--------------------------------------------------------------
+#include <Wire.h>
+static uint8_t  i2c_command;
+
+
+//--------------------------------------------------------------
+// function that executes whenever data is requested by master
+// this function is registered as an event, see setup()
+void requestI2CEvent() 
+{
+    uint32_t time = millis();
+    
+  switch( i2c_command )
+  {
+    case 0x11:
+    case 0x12:
+    case 0x13:
+    case 0x14:
+    case 0x15:
+    case 0x16:
+    Wire.write((const uint8_t *)&sensordata[((i2c_command&0x0F) % 6)-1], sizeof(sensortemperatureData));
+    break;
+
+    case 0x0F:
+    Wire.write((const uint8_t *)&time, 4);
+    break;
+
+    default:
+    Wire.write(72); 
+    break;
+  }
+}
+
+//--------------------------------------------------------------
+void receiveI2CEvent( int count ) 
+{
+  while (Wire.available()) 
+  {
+    i2c_command = Wire.read(); // receive all bytes, keep last one
+  }
+}
+//--------------------------------------------------------------
+//--------------------------------------------------------------
 //---------------- setup() -------------------------------------------
 void setup()
 {
@@ -309,6 +360,10 @@ void setup()
    attachInterrupt(1, handler, CHANGE);
    pinMode(SQUELCHPIN, OUTPUT);         // data squelch pin on radio module
    digitalWrite(SQUELCHPIN, HIGH);      // UN-squelch data
+
+   Wire.begin(0x31);                // join i2c bus with address 0x31
+   Wire.onRequest(requestI2CEvent); // register event
+   Wire.onReceive(receiveI2CEvent);
 }
 
 //---------------- convertTimingToBit() -------------------------------
