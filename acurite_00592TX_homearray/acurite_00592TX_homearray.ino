@@ -275,8 +275,7 @@ typedef struct acurite_00592TX
 typedef struct sensortemperatureData
 {
     uint8_t     id;             // sensor id (1 - N_sensors)
-    uint8_t     status;         // 0x80 = BATTERY LOW
-                                // 0x40 = CRC ERROR
+    uint8_t     status;         // 0x80 = BATTERY LOW bit
     uint16_t    temperature;    // temperature value in C, no offset
     uint32_t    timestamp;      // number of seconds since startup
 } sensortemperatureData;
@@ -294,7 +293,6 @@ static const uint8_t BATTERY_LOW_MASK = 0xC0;
 static const uint8_t BATTERY_LOW_VAL  = 0x80;
 static const uint8_t BATTERY_OK_VAL   = 0x40;
 static const uint8_t BATTERY_LOW      = 0x80;
-static const uint8_t CRC_ERROR        = 0x40;
 
 //---------------- setup() -------------------------------------------
 void setup()
@@ -420,15 +418,16 @@ void loop()
 
       sensordata[id].id = id+1;
       
-      // check for a CRC error but let the data pass
-      // helpful for keeping track of error counts
+      // CRC ERROR in received data, ignore
       if( CRC != acurite_data->crc )
       {
-        sensordata[id].status |= CRC_ERROR;
-      }
-      else
-      {
-        sensordata[id].status &= ~CRC_ERROR;
+            Serial.println("Sensor Data CRC : CRC error.");
+            // reset flags to allow next capture
+            received = false;
+            syncFound = false;
+            // re-enable interrupt
+            attachInterrupt(1, handler, CHANGE);
+            return;      // exit due to error
       }
       
       // check for a low battery indication
