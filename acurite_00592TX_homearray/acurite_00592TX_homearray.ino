@@ -322,7 +322,7 @@ void requestI2CEvent()
     case 0x14:
     case 0x15:
     case 0x16:
-    Wire.write((const uint8_t *)&sensordata[((i2c_command&0x0F) % 6)-1], sizeof(sensortemperatureData));
+    Wire.write((const uint8_t *)&sensordata[((i2c_command&0x0F) % 7)-1], sizeof(sensortemperatureData));
     break;
 
     case 0x0F:
