@@ -369,6 +369,11 @@ void loop()
          if( bit < 0 )
          {  
             Serial.println("Bit Timing : Decoding error.");
+            // reset flags to allow next capture
+            received = false;
+            syncFound = false;
+            // re-enable interrupt
+            attachInterrupt(1, handler, CHANGE);
             return;      // exit due to error
          }
          else
@@ -388,11 +393,11 @@ void loop()
 
       // overlay typed stucture over raw bytes 
       acurite_00592TX * acurite_data = (acurite_00592TX *)&dataBytes[0];
-      
+
       // fill in sensor data array
       uint16_t hexID = acurite_data->id_high * 256 + acurite_data->id_low;
       uint8_t  id = _numSensors+1; // preset to illegal
-      
+
       // find which sensor id, search sendor id array
       for( int i = 0; i < _numSensors; i++ )
       {
@@ -401,10 +406,15 @@ void loop()
                 id = i;
           }
       }
-      
+
       if( id > _numSensors )
       {
             Serial.println("Sensor ID : out of bounds error.");
+            // reset flags to allow next capture
+            received = false;
+            syncFound = false;
+            // re-enable interrupt
+            attachInterrupt(1, handler, CHANGE);
             return;      // exit due to error
       }
 
@@ -459,8 +469,7 @@ void loop()
       }
 #endif // PRINT_DATA_ARRAY
 
-      // delay for 1 second to avoid repetitions
-      delay(1000);
+      
       received = false;
       syncFound = false;
 
