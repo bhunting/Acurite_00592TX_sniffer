@@ -1,5 +1,5 @@
 /**********************************************************************
- * Arduino code to sniff the Acurite 00592TX wireless temperature
+ * Arduino code to sniff the Acurite 00592TX wireless temperatureerature
  * probe output data stream.
  *
  * Ideas on decoding protocol and prototype code from
@@ -12,17 +12,17 @@
  * Code based on Ray Wang's humidity_display.ino source.
  * Heavily modified by Brad Hunting.
  *
- * The 00592TX wireless temperature probe contains a 433 MHz
- * wireless transmitter. The temperature from the probe is
+ * The 00592TX wireless temperatureerature probe contains a 433 MHz
+ * wireless transmitter. The temperatureerature from the probe is
  * sent approximately every 16 seconds.
  *
  * The 00592TX typically only sends one SYNC pulse + DATA stream
- * per temperature reading. Infrequently two sync/data streams
+ * per temperatureerature reading. Infrequently two sync/data streams
  * are sent during the same transmit window but that seems to 
  * be the exception.
  *
  * Ray Wang's code is for a different model of probe, one that 
- * transmits both temperature and humidity. Ray' code relies on 
+ * transmits both temperatureerature and humidity. Ray' code relies on 
  * two sync streams with a preceeding delay. 
  * 
  * The 00592TX usually starts the data sync bits right after
@@ -81,7 +81,7 @@
  *   When the remote probe batteries are fresh, voltage above 2.5V, the third byte is 0x44.
  *   When the remote probe batteries get low, below 2.4V, the third byte changes to 0x84.
  * The fourth byte continues to stay at 0x90 for all conditions.
- * The next two bytes are the temperature. The temperature is encoded as the
+ * The next two bytes are the temperatureerature. The temperatureerature is encoded as the
  *   lower 7 bits of both bytes with the most significant bit being an
  *   even parity bit.  The MSB will be set if required to insure an even
  *   number of bits are set to 1 in the byte. If the least significant
@@ -267,25 +267,25 @@ typedef struct acurite_00592TX
     uint8_t     id_low;
     uint8_t     status;
     uint8_t     rsvd;
-    uint8_t     temp_high;
-    uint8_t     temp_low;
+    uint8_t     temperature_high;
+    uint8_t     temperature_low;
     uint8_t     crc;
 } acurite_00592TX;
  
-typedef struct sensorTempData
+typedef struct sensortemperatureData
 {
-    uint8_t     id;     // sensor id (1 - N_sensors)
-    uint8_t     status; // 0x80 = BATTERY LOW
-                        // 0x40 = CRC ERROR
-    uint16_t    temp;   // temperature value in C, no offset
-    uint32_t    timestamp;  // number of seconds since startup
-} sensorTempData;
+    uint8_t     id;             // sensor id (1 - N_sensors)
+    uint8_t     status;         // 0x80 = BATTERY LOW
+                                // 0x40 = CRC ERROR
+    uint16_t    temperature;    // temperatureerature value in C, no offset
+    uint32_t    timestamp;      // number of seconds since startup
+} sensortemperatureData;
 
 static const uint8_t _numSensors = 6; // I happen to have 6 sensor probes
 
-static sensorTempData sensordata[_numSensors];
+static sensortemperatureData sensordata[_numSensors];
 
-static uint16_t temp;
+static uint16_t temperature;
 
 static uint16_t idArray[_numSensors] = 
 { 0x0C34, 0x1E09, 0x26ED, 0x36E7, 0x0604, 0x386C };
@@ -352,11 +352,9 @@ void loop()
       // disable interrupt to avoid new data corrupting the buffer
       detachInterrupt(1);
 
-      // extract temperature value
+      // extract temperatureerature value
       unsigned int startIndex, stopIndex, ringIndex;
-      unsigned long temperature = 0;
-      bool fail = false;
-
+      unsigned long temperatureerature = 0;
       uint8_t dataBytes[DATABYTESCNT];
       // clear the data bytes array
       for( int i = 0; i < DATABYTESCNT; i++ )
@@ -373,8 +371,8 @@ void loop()
                                        
          if( bit < 0 )
          {  
-            fail = true;
-            break;      // exit loop
+            Serial.println("Bit Timing : Decoding error.");
+            return;      // exit due to error
          }
          else
          {
@@ -384,30 +382,21 @@ void loop()
          ringIndex += 2;
       }
 
-      // 
+      // calculate CRC as sum of first 6 bytes
+      CRC = 0; 
+      for( int i = 0; i < DATABYTESCNT-1; i++ )
+      {
+        CRC += dataBytes[i]; 
+      }            
+
+      // overlay typed stucture over raw bytes 
       acurite_00592TX * acurite_data = (acurite_00592TX *)&dataBytes[0];
       
-      if( fail )
-      {
-#ifdef PRINT_ERRORS
-         Serial.println("Data Byte Display : Decoding error.");
-#endif  // PRINT_ERRORS
-      }
-      else
-      {
-              // calculate CRC as sum of first 6 bytes
-              CRC = 0; 
-              for( int i = 0; i < DATABYTESCNT-1; i++ )
-              {
-                CRC += dataBytes[i]; 
-              }            
-      }
-
-      // fill in data array
+      // fill in sensor data array
       uint16_t hexID = acurite_data->id_high * 256 + acurite_data->id_low;
-      uint8_t  id = _numSensors+1; // preset to error position
+      uint8_t  id = _numSensors+1; // preset to illegal
       
-      // find which sensor id
+      // find which sensor id, search sendor id array
       for( int i = 0; i < _numSensors; i++ )
       {
           if( hexID == idArray[i] )
@@ -418,11 +407,14 @@ void loop()
       
       if( id > _numSensors )
       {
-        goto DATA_FAIL;
+            Serial.println("Sensor ID : out of bounds error.");
+            return;      // exit due to error
       }
 
       sensordata[id].id = id+1;
       
+      // check for a CRC error but let the data pass
+      // helpful for keeping track of error counts
       if( CRC != acurite_data->crc )
       {
         sensordata[id].status |= CRC_ERROR;
@@ -432,6 +424,7 @@ void loop()
         sensordata[id].status &= ~CRC_ERROR;
       }
       
+      // check for a low battery indication
       if( (acurite_data->status & BATTERY_LOW_MASK) == BATTERY_LOW_VAL )
       {
          sensordata[id].status |= BATTERY_LOW;
@@ -442,16 +435,20 @@ void loop()
       }
 
       // extract temperature value
-      temp = 0;
-      fail = false;
+      sensordata[id].temperature = 0;
+      temperature = 0;
       // most significant 4 bits
       startIndex = (dataIndex + (4*8+4)*2) % RING_BUFFER_SIZE;
       stopIndex  = (dataIndex + (4*8+8)*2) % RING_BUFFER_SIZE;
       for( int i = startIndex; i != stopIndex; i = (i+2)%RING_BUFFER_SIZE )
       {
          int bit = convertTimingToBit(pulseDurations[i], pulseDurations[(i+1)%RING_BUFFER_SIZE]);
-         temp = (temp<<1) + bit;
-         if( bit < 0 )  fail = true;
+         temperature = (temperature<<1) + bit;
+         if( bit < 0 )
+         {  
+            Serial.println("Bit Timing : Decoding error.");
+            return;      // exit due to error
+         }
       }
       // least significant 7 bits
       startIndex = (dataIndex + (5*8+1)*2) % RING_BUFFER_SIZE;
@@ -460,22 +457,16 @@ void loop()
       {
          int bit = convertTimingToBit( pulseDurations[i%RING_BUFFER_SIZE], 
                                        pulseDurations[(i+1)%RING_BUFFER_SIZE] );
-         temp = ( temp << 1 ) + bit; // shift and insert next bit
-         if( bit < 0 )  fail = true;
+         temperature = ( temperature << 1 ) + bit; // shift and insert next bit
+         if( bit < 0 )
+         {  
+            Serial.println("Bit Timing : Decoding error.");
+            return;      // exit due to error
+         }
       }    
 
-      if( fail )
-      {
-        sensordata[id].temp = 0;
-#ifdef PRINT_ERRORS      
-         Serial.println("Decoding error.");
-#endif                 
-      }
-      else
-      {
-        sensordata[id].temp = (uint16_t)((temp-1024)+0.5);
-        sensordata[id].timestamp = millis() / 1000;  // convert milli-seconds into seconds
-      } 
+      sensordata[id].temperature = (uint16_t)((temperature-1024)+0.5);
+      sensordata[id].timestamp = millis() / 1000;  // convert milli-seconds into seconds
       
 #ifdef PRINT_DATA_ARRAY
       for( int i = 0; i < _numSensors; i++ )
@@ -484,8 +475,8 @@ void loop()
         Serial.print(sensordata[i].id);
         Serial.print(", status = ");
         Serial.print(sensordata[i].status, HEX);
-        Serial.print(", temp = ");
-        Serial.print(sensordata[i].temp);
+        Serial.print(", temperature = ");
+        Serial.print(sensordata[i].temperature);
         Serial.print(", time = ");
         Serial.println(sensordata[i].timestamp);
 
