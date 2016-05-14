@@ -459,7 +459,6 @@ void loop()
       }
 #endif // PRINT_DATA_ARRAY
 
-DATA_FAIL:      
       // delay for 1 second to avoid repetitions
       delay(1000);
       received = false;
