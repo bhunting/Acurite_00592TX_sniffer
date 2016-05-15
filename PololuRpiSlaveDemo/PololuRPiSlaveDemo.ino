@@ -1,5 +1,5 @@
-#include <Servo.h>
-#include <AStar32U4.h>
+#include <Arduino.h>
+
 #include <PololuRPiSlave.h>
 
 /* This example program shows how to make the A-Star 32U4 Robot
@@ -24,33 +24,44 @@
 // data format, make sure to update the corresponding code in
 // a_star.py on the Raspberry Pi.
 
+
+typedef struct sensortemperatureData
+{
+    uint8_t     id;             // sensor id (1 - N_sensors)
+    uint8_t     status;         // 0x80 = BATTERY LOW bit
+    uint16_t    temperature;    // temperature value in C, no offset
+    uint32_t    timestamp;      // number of seconds since startup
+} sensortemperatureData;
+
+static const uint8_t _numSensors = 6; // I happen to have 6 sensor probes
+
 struct Data
 {
-  bool yellow, green, red;
-  bool buttonA, buttonB, buttonC;
-
-  int16_t leftMotor, rightMotor;
-  uint16_t batteryMillivolts;
-  uint16_t analog[6];
-
-  bool playNotes;
-  char notes[14];
+    sensortemperatureData sensordata[_numSensors];
 };
 
 PololuRPiSlave<struct Data,0> slave;
-PololuBuzzer buzzer;
-AStar32U4Motors motors;
-AStar32U4ButtonA buttonA;
-AStar32U4ButtonB buttonB;
-AStar32U4ButtonC buttonC;
 
 void setup()
 {
+   Serial.begin(9600);
+   Serial.println("Started.");
+
   // Set up the slave at I2C address 20.
   slave.init(20);
 
-  // Play startup sound.
-  buzzer.play("v10>>g16>>>c16");
+  // Call updateBuffer() before using the buffer, to get the latest
+  // data including recent master writes.
+  slave.updateBuffer();
+  
+  // pre-fill various values into the data structure.
+  for(uint8_t i = 0; i < _numSensors; i++)
+  {
+    slave.buffer.sensordata[i].id = i+1;
+  }
+  // When you are done WRITING, call finalizeWrites() to make modified
+  // data available to I2C master.
+  slave.finalizeWrites();
 }
 
 void loop()
@@ -60,32 +71,23 @@ void loop()
   slave.updateBuffer();
 
   // Write various values into the data structure.
-  slave.buffer.buttonA = buttonA.isPressed();
-  slave.buffer.buttonB = buttonB.isPressed();
-  slave.buffer.buttonC = buttonC.isPressed();
-
-  // Change this to readBatteryMillivoltsLV() for the LV model.
-  slave.buffer.batteryMillivolts = readBatteryMillivoltsSV();
-
-  for(uint8_t i=0; i<6; i++)
-  {
-    slave.buffer.analog[i] = analogRead(i);
-  }
+  //for(uint8_t i = 0; i < _numSensors; i++)
+  //{
+  //  slave.buffer.sensordata[i].id = i+1;
+  //}
 
   // READING the buffer is allowed before or after finalizeWrites().
-  ledYellow(slave.buffer.yellow);
-  ledGreen(slave.buffer.green);
-  ledRed(slave.buffer.red);
-  motors.setSpeeds(slave.buffer.leftMotor, slave.buffer.rightMotor);
-
-  // Playing music involves both reading and writing, since we only
-  // want to do it once.
-  if(slave.buffer.playNotes)
-  {
-    buzzer.play(slave.buffer.notes);
-    while(buzzer.isPlaying());
-    slave.buffer.playNotes = false;
-  }
+      for( int i = 0; i < _numSensors; i++ )
+      {
+        Serial.print("id = ");
+        Serial.print(slave.buffer.sensordata[i].id);
+        Serial.print(", status = ");
+        Serial.print(slave.buffer.sensordata[i].status, HEX);
+        Serial.print(", temperature = ");
+        Serial.print(slave.buffer.sensordata[i].temperature);
+        Serial.print(", time = ");
+        Serial.println(slave.buffer.sensordata[i].timestamp);
+      }
 
   // When you are done WRITING, call finalizeWrites() to make modified
   // data available to I2C master.
