@@ -119,9 +119,12 @@ id = 4, status = 0, temperature = 0, time = 0
 id = 5, status = 0, temperature = 0, time = 0
 id = 6, status = 0, temperature = 0, time = 0
 ```
+Byte 0 (1) shows up in the data structure at offset 0 which is the id.
+Byte 1 (2) shows up in the data structure at offset 1 which is the status.
+Bytes 2 and 3 (3,4) end up in the temperature value. Temperature is a uint16_t which is two bytes. The values get stored little Endian on the Arduino. 0x04 in lower memory, 0x03 next. Little Endian is most significant byte in lower memory so the temperature value in memory is 0x0403. Converting 0x0403 to decimal is 1027.
+The next 4 bytes, 5,6,7,8 are stored in the timestamp field as 0x08070605 which is 134678021 decimal.
 
-Now reading back the data from the Arduino to the RasPi
-
+Reading back the data from the Arduino to the RasPi
 
 ```
 pi@raspberrypi:~$ sudo python
