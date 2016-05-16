@@ -133,6 +133,7 @@ bool         syncFound = false; // true if sync pulses found
 bool         received  = false; // true if sync plus enough bits found
 unsigned int changeCount = 0;
 
+const byte   interruptPin = 3;
 
 //------------- PrintHex8() ------------------------------------------
 /*
@@ -267,6 +268,7 @@ void handler()
 //--- data structures for returning temperature data -----------
 //--------------------------------------------------------------
 
+// raw byte stream from sensors
 typedef struct acurite_00592TX
 {
     uint8_t     id_high;
@@ -278,6 +280,7 @@ typedef struct acurite_00592TX
     uint8_t     crc;
 } acurite_00592TX;
  
+ // formatted data pulled from raw sensor data
 typedef struct sensortemperatureData
 {
     uint8_t     id;             // sensor id (1 - N_sensors)
@@ -286,15 +289,17 @@ typedef struct sensortemperatureData
     uint32_t    timestamp;      // number of seconds since startup
 } sensortemperatureData;
 
+// number of sensor / data structures that _I_ have in my house
 static const uint8_t _numSensors = 6; // I happen to have 6 sensor probes
 
-static sensortemperatureData sensordata[_numSensors];
-
+// The binary addresses assigned by the manufacturer for the sensors
+// _I_ have in my house (change to your sensor addressses as needed)
 static uint16_t idArray[_numSensors] = 
 { 0x0C34, 0x1E09, 0x26ED, 0x36E7, 0x0604, 0x386C };
 
 static uint8_t CRC = 0;
 
+// reduced sensor status
 static const uint8_t BATTERY_LOW_MASK = 0xC0;
 static const uint8_t BATTERY_LOW_VAL  = 0x80;
 static const uint8_t BATTERY_OK_VAL   = 0x40;
@@ -302,68 +307,46 @@ static const uint8_t BATTERY_LOW      = 0x80;
 
 //--------------------------------------------------------------
 //----- variable for returing data over I2C --------------------
+//----- using data structure from Pololu I2C library -----------
 //--------------------------------------------------------------
-#include <Wire.h>
-static uint8_t  i2c_command;
+#include <Arduino.h>
+#include <PololuRPiSlave.h>
 
-
-//--------------------------------------------------------------
-// function that executes whenever data is requested by master
-// this function is registered as an event, see setup()
-void requestI2CEvent() 
+struct Data
 {
-    uint32_t time = millis();
-    
-  switch( i2c_command )
-  {
-    case 0x11:
-    case 0x12:
-    case 0x13:
-    case 0x14:
-    case 0x15:
-    case 0x16:
-    Wire.write((const uint8_t *)&sensordata[((i2c_command&0x0F) % 7)-1], sizeof(sensortemperatureData));
-    break;
+    sensortemperatureData sensordata[_numSensors];
+};
 
-    case 0x0F:
-    Wire.write((const uint8_t *)&time, 4);
-    break;
+PololuRPiSlave<struct Data,10> slaveSensorData;
 
-    default:
-    Wire.write(72); 
-    break;
-  }
-}
-
-//--------------------------------------------------------------
-void receiveI2CEvent( int count ) 
-{
-  while (Wire.available()) 
-  {
-    i2c_command = Wire.read(); // receive all bytes, keep last one
-  }
-}
 //--------------------------------------------------------------
 //--------------------------------------------------------------
 //---------------- setup() -------------------------------------------
 void setup()
 {
-   for( int i = 0; i < _numSensors; i++ )
-   {
-      sensordata[i].id = i+1;
-   }
-   
    Serial.begin(9600);
    Serial.println("Started.");
    pinMode(DATAPIN, INPUT);             // data interrupt input
    pinMode(13, OUTPUT);                 // LED output
-   attachInterrupt(1, handler, CHANGE);
+   attachInterrupt(digitalPinToInterrupt(interruptPin), handler, CHANGE);
    pinMode(SQUELCHPIN, OUTPUT);         // data squelch pin on radio module
    digitalWrite(SQUELCHPIN, HIGH);      // UN-squelch data
 
-   Wire.begin(0x31);                // join i2c bus with address 0x31
-   Wire.onRequest(requestI2CEvent); // register event
-   Wire.onReceive(receiveI2CEvent);
+  // Set up the slaveSensorData at I2C address 20.
+  slaveSensorData.init(20);
+
+  // Call updateBuffer() before using the buffer, to get the latest
+  // data including recent master writes.
+  slaveSensorData.updateBuffer();
+  
+  // pre-fill various values into the data structure.
+  for(uint8_t i = 0; i < _numSensors; i++)
+  {
+    slaveSensorData.buffer.sensordata[i].id = i+1;
+  }
+  // When you are done WRITING, call finalizeWrites() to make modified
+  // data available to I2C master.
+  slaveSensorData.finalizeWrites();
 }
 
 //---------------- convertTimingToBit() -------------------------------
@@ -386,8 +369,8 @@ int convertTimingToBit(unsigned int t0, unsigned int t1)
    return -1;  // undefined
 }
 
-#define PRINT_DATA_ARRAY
-
+//#define PRINT_DATA_ARRAY
+#define PRINT_NEW_DATA
 //-------------------- loop() ----------------------------------------------
 /*
  * Main Loop
@@ -398,10 +381,14 @@ int convertTimingToBit(unsigned int t0, unsigned int t1)
  */
 void loop()
 {
+   // Call updateBuffer() before using the buffer, to get the latest
+   // data including recent master writes.
+   slaveSensorData.updateBuffer();
+  
    if( received == true )
    {
       // disable interrupt to avoid new data corrupting the buffer
-      detachInterrupt(1);
+      detachInterrupt(digitalPinToInterrupt(interruptPin));
 
       // convert bits to bytes
       unsigned int startIndex, stopIndex, ringIndex;
@@ -426,7 +413,7 @@ void loop()
             received = false;
             syncFound = false;
             // re-enable interrupt
-            attachInterrupt(1, handler, CHANGE);
+            attachInterrupt(digitalPinToInterrupt(interruptPin), handler, CHANGE);
             return;      // exit due to error
          }
          else
@@ -447,6 +434,18 @@ void loop()
       // overlay typed stucture over raw bytes 
       acurite_00592TX * acurite_data = (acurite_00592TX *)&dataBytes[0];
 
+      // CRC ERROR in received data, ignore
+      if( CRC != acurite_data->crc )
+      {
+            Serial.println("Sensor Data CRC : CRC error.");
+            // reset flags to allow next capture
+            received = false;
+            syncFound = false;
+            // re-enable interrupt
+            attachInterrupt(digitalPinToInterrupt(interruptPin), handler, CHANGE);
+            return;      // exit due to error
+      }
+      
       // fill in sensor data array
       uint16_t hexID = acurite_data->id_high * 256 + acurite_data->id_low;
       uint8_t  id = _numSensors+1; // preset to illegal
@@ -467,37 +466,25 @@ void loop()
             received = false;
             syncFound = false;
             // re-enable interrupt
-            attachInterrupt(1, handler, CHANGE);
+            attachInterrupt(digitalPinToInterrupt(interruptPin), handler, CHANGE);
             return;      // exit due to error
       }
 
-      sensordata[id].id = id+1;
-      
-      // CRC ERROR in received data, ignore
-      if( CRC != acurite_data->crc )
-      {
-            Serial.println("Sensor Data CRC : CRC error.");
-            // reset flags to allow next capture
-            received = false;
-            syncFound = false;
-            // re-enable interrupt
-            attachInterrupt(1, handler, CHANGE);
-            return;      // exit due to error
-      }
+      slaveSensorData.buffer.sensordata[id].id = id+1;
       
       // check for a low battery indication
       if( (acurite_data->status & BATTERY_LOW_MASK) == BATTERY_LOW_VAL )
       {
-         sensordata[id].status |= BATTERY_LOW;
+         slaveSensorData.buffer.sensordata[id].status |= BATTERY_LOW;
       }
       else
       {
-        sensordata[id].status &= ~BATTERY_LOW;
+        slaveSensorData.buffer.sensordata[id].status &= ~BATTERY_LOW;
       }
 
       // extract temperature value
       uint16_t temperature = 0;
-      sensordata[id].temperature = 0;
+      slaveSensorData.buffer.sensordata[id].temperature = 0;
       
       // data bytes have already been decoded
       // 7 bits are significant, 8th bit is even parity bit
@@ -505,31 +492,46 @@ void loop()
       temperature = ((acurite_data->temperature_high) & 0x7F) << 7;
       temperature += (acurite_data->temperature_low) & 0x7F;
       // temperature is offset by 1024 (= 0x400 = b0100 0000 0000)
-      sensordata[id].temperature = (uint16_t)((temperature-1024)+0.5);
-      sensordata[id].timestamp = millis() / 1000;  // convert milli-seconds into seconds
+      slaveSensorData.buffer.sensordata[id].temperature = (uint16_t)((temperature-1024)+0.5);
+      slaveSensorData.buffer.sensordata[id].timestamp = millis() / 1000;  // convert milli-seconds into seconds
+      
+      // When you are done WRITING, call finalizeWrites() to make modified
+      // data available to I2C master.
+      slaveSensorData.finalizeWrites();
+      
+#ifdef PRINT_NEW_DATA
+        Serial.print("id = ");
+        Serial.print(slaveSensorData.buffer.sensordata[id].id);
+        Serial.print(", status = ");
+        Serial.print(slaveSensorData.buffer.sensordata[id].status, HEX);
+        Serial.print(", temperature = ");
+        Serial.print(slaveSensorData.buffer.sensordata[id].temperature);
+        Serial.print(", time = ");
+        Serial.println(slaveSensorData.buffer.sensordata[id].timestamp);
+#endif // PRINT_NEW_DATA
       
 #ifdef PRINT_DATA_ARRAY
       for( int i = 0; i < _numSensors; i++ )
       {
         Serial.print("id = ");
-        Serial.print(sensordata[i].id);
+        Serial.print(slaveSensorData.buffer.sensordata[i].id);
         Serial.print(", status = ");
-        Serial.print(sensordata[i].status, HEX);
+        Serial.print(slaveSensorData.buffer.sensordata[i].status, HEX);
         Serial.print(", temperature = ");
-        Serial.print(sensordata[i].temperature);
+        Serial.print(slaveSensorData.buffer.sensordata[i].temperature);
         Serial.print(", time = ");
-        Serial.println(sensordata[i].timestamp);
-
+        Serial.println(slaveSensorData.buffer.sensordata[i].timestamp);
       }
 #endif // PRINT_DATA_ARRAY
 
-      
+      // clear sensor data received flag to read next data      
       received = false;
       syncFound = false;
 
       // re-enable interrupt
-      attachInterrupt(1, handler, CHANGE);
-   }
-}
+      attachInterrupt(digitalPinToInterrupt(interruptPin), handler, CHANGE);
+   } // new data received
+   
+} // loop
 
 
