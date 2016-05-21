@@ -2,6 +2,7 @@
 from pololui2c import pololuI2C
 
 i2c = pololuI2C()
+i2c.set_i2c_address(0x14)
 
 def fillsensorvals( sensortofill ):
   "function to fill sensor values"
