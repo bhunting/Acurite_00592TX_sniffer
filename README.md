@@ -19,7 +19,7 @@ The 00592TX usually starts the data sync bits right after the RF sync pulses whi
 
 Do not rely on a dead/mark time at the beginning of the data sync stream.
 
-The 00592TX first emits a seemingly random length string of random width hi/lo pulses, most like to provide radio radio synchronization.
+The 00592TX first emits a seemingly random length string of random width hi/lo pulses, most like to provide radio to radio (emitter / receiver) synchronization.
 
 The probe then emits 4 data sync pulses of approximately 50% duty cycle and 1.2 ms period. The sync pulses start with a high level and continue for 4 high / low pulses.
 
